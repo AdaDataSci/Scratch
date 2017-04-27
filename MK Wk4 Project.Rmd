@@ -1,0 +1,134 @@
+---
+title: "ML Wk4 Project.2"
+output: html_document
+---
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```library(caret)
+library(dplyr)
+library(rattle)
+install.packages("readr")
+library(readr)
+install.packages("xtable")
+install.packages("rpart.plot")
+library(rpart.plot)
+library(xtable)
+library(parallel)
+install.packages("doParallel")
+library(doParallel)
+install.packages("randomForest")
+library(randomForest)
+set.seed(123)
+
+#download training set from internet
+fileurl<- "https://d396qusza40orc.cloudfront.net/
+predmachlearn/pml-training.csv"
+download.file(fileurl, destfile =
+                "/Users/angelina/Desktop/CourseEra/training", method = "curl")
+
+#download testing set from internet
+fileurl2<-"https://d396qusza40orc.cloudfront.net/
+      predmachlearn/pml-testing.csv"
+download.file(fileurl2, destfile =
+                "/Users/angelina/Desktop/CourseEra/testing", method = "curl")
+#training and test set data frame
+training<-read_csv("/Users/angelina/Desktop/CourseEra/training")
+testing<- read_csv( "/Users/angelina/Desktop/CourseEra/testing")
+
+#explore data
+dim(training)
+colnames(training)
+str(training$classe)
+summary(training)
+
+#summarize data, create plots
+sumtrain<- as.data.frame.matrix(training %>% group_by(user_name) %>%
+                                  select(classe) %>% table())
+g<-ggplot(training, aes(y = ..count..,x =user_name,fill = classe))
+g+geom_bar()
+
+g<-ggplot(training, aes(y = ..count..,x =classe,fill = user_name))
+g+geom_bar()
+
+#table
+Summary<-xtable(sumtrain)
+print.xtable(Summary, type="html",file="WeightTrainTable.html")
+
+#feature selection
+nzv <- nearZeroVar(training, saveMetrics=TRUE)
+nzv2 <- which(nzv$nzv==TRUE)
+training <- training[,-nzv2]
+testing <- testing[,-nzv2]
+training<- training[,apply(!is.na(training), 2, all)]
+testing <- testing[,apply(!is.na(testing), 2, all)]
+#after scrubbing above training set has 56 variables
+#test set has 59. Remove extra variables from test set too.
+testing<-select(testing,c(1:44,46:56,59))
+
+#remove variable X they are index vairables
+str(training$X)
+training<-training[,-1]
+testing<-testing[,-c(1)]
+
+#fit models
+      #tree
+rpart<-train(classe~., data =training, method="rpart")
+rpart
+rpart$results
+rpart$finalModel
+fancyRpartPlot(rpart$finalModel)
+confusionMatrix(rpart)
+
+#rpart 2
+rpart2<-rpart(classe ~ .,data=training,method="class",
+              parms=list(split="information"),
+              control=rpart.control(usesurrogate=0, maxsurrogate=0))
+rpart2
+pred<-predict(rpart2, type="class")
+table(pred,training$classe)
+
+      #rf
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+fitControl <- trainControl(method = "cv",
+                           number = 10,
+                           allowParallel = TRUE)
+rf<-train(classe~., data =training, method="rf", 
+          trControl = fitControl)
+stopCluster(cluster)
+registerDoSEQ()
+#result
+rf
+rf$finalModel
+varImp(rf)
+importance(rf$finalModel)
+# prediction
+rfpred <-predict(rf,newdata = testing)
+
+      #boosting
+gbm <- train(classe ~ ., method="gbm", data=training, verbose=F)
+gbm
+gbm$finalModel
+varImp(gbm)
+#prediction
+gbmPred <-predict(gbm,newdata = testing)
+
+    #rf vs gbm prediction
+z<-cbind(rfpred,gbmPred)
+z
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r g+geom_bar(), echo=FALSE}
+plot(g+geom_bar())
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
